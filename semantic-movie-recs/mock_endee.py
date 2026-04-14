@@ -1,6 +1,8 @@
 import flask
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import os
+import json
 import numpy as np
 import uuid
 import logging
@@ -10,10 +12,31 @@ CORS(app)
 
 # In-memory storage for indexes and vectors
 # Structure: { index_name: { "dimension": int, "vectors": [ {id, vector, payload} ] } }
+SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "mock_index_db.json")
 indexes = {}
+
+def save_data():
+    try:
+        with open(SAVE_FILE, "w") as f:
+            json.dump(indexes, f)
+        logger.info(f"Data saved to {SAVE_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to save data: {e}")
+
+def load_data():
+    global indexes
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r") as f:
+                indexes = json.load(f)
+            logger.info(f"Data loaded from {SAVE_FILE} ({len(indexes)} indexes)")
+        except Exception as e:
+            logger.error(f"Failed to load data: {e}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mock-endee")
+
+load_data()
 
 @app.route("/api/v1/health", methods=["GET"])
 def health():
@@ -31,6 +54,7 @@ def create_index():
         "dimension": dimension,
         "vectors": []
     }
+    save_data()
     logger.info(f"Created index: {name} with dimension {dimension}")
     return jsonify({"status": "created"}), 201
 
@@ -45,6 +69,7 @@ def delete_index():
     name = data.get("name")
     if name in indexes:
         del indexes[name]
+        save_data()
         return jsonify({"status": "deleted"}), 200
     return jsonify({"error": "not found"}), 404
 
@@ -66,6 +91,7 @@ def upsert_vectors():
         else:
             indexes[index_name]["vectors"].append(v)
             
+    save_data()
     logger.info(f"Upserted {len(new_vectors)} vectors to {index_name}")
     return jsonify({"status": "success", "count": len(new_vectors)}), 200
 
